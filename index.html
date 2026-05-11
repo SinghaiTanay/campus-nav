@@ -213,7 +213,7 @@
         // --- Fetch Rooms for Dropdowns ---
         async function load_room() {
             try {
-                const res = await fetch('http://127.0.0.1:8000/search_rooms');
+                const res = await fetch('https://campus-nav-rt5d.onrender.com/search_rooms');
                 const rooms = await res.json();
                 
                 const startSelect = document.getElementById('start');
@@ -250,7 +250,7 @@
 
                 if(!start || !end) return alert("Please select both locations!");
 
-                const res = await fetch(`http://127.0.0.1:8000/find_route?startNode=${start}&endNode=${end}`);
+                const res = await fetch(`https://campus-nav-rt5d.onrender.com/find_route?startNode=${start}&endNode=${end}`);
                 const result = await res.json();
                 
                 // Convert [x, y] from NetworkX to [y, x] for Leaflet Simple CRS
