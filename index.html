@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Navigator | Tanay Singhai</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* General Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevents whole-page scrolling */
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 350px;
+            background: #ffffff;
+            padding: 1.5rem;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            overflow-y: auto; /* Allows sidebar to scroll if route is long */
+        }
+
+        header h1 {
+            color: #2563eb;
+            font-size: 1.6rem;
+        }
+
+        header p {
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        label {
+            font-weight: 600;
+            color: #334155;
+            font-size: 0.8rem;
+        }
+
+        select {
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            background-color: white;
+            outline: none;
+        }
+
+        select:focus {
+            border-color: #2563eb;
+        }
+
+        button {
+            background-color: #2563eb;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        #route {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #334155;
+        }
+
+        #route p {
+            padding: 5px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .info-box {
+            margin-top: auto;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+            font-size: 0.8rem;
+            color: #475569;
+        }
+
+        /* Map Area Styling */
+        .map-view {
+            flex-grow: 1;
+            position: relative;
+            background-color: #e5e7eb;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .credit-footer {
+            text-align: center;
+            padding-top: 1rem;
+            color: #94a3b8;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: 45vh; /* Sidebar takes top half on mobile */
+                padding: 1rem;
+            }
+
+            .map-view {
+                height: 55vh; /* Map takes bottom half */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <header>
+                <h1>CampusNav</h1>
+                <p>Find your way around college</p>
+            </header>
+            
+            <div class="input-group">
+                <label for="start">Starting Point</label>
+                <select id="start">
+                    <option value="" disabled selected>Loading rooms...</option>
+                </select>
+            </div>
+            
+            <div class="input-group">
+                <label for="end">Destination</label>
+                <select id="end">
+                    <option value="" disabled selected>Loading rooms...</option>
+                </select>
+            </div>
+
+            <button id="find-route" onclick="get_route()">Find Route</button>
+
+            <div id="route"></div>
+
+            <div id="instructions" class="info-box">
+                <p>Select your locations to visualize the shortest path on the map.</p>
+            </div>
+
+            <div class="credit-footer">
+                <p>Made By Tanay Singhai</p>
+            </div>
+        </aside>
+
+        <!-- Map -->
+        <main class="map-view">
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- Map Initialization ---
+        var imgWidth = 100;
+        var imgHeight = 50;
+
+        var map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -1
+        });
+
+        var imageBounds = [[0, 0], [imgHeight, imgWidth]];
+        L.imageOverlay('Village-Apartment-Layout.jpg', imageBounds).addTo(map);
+        map.fitBounds(imageBounds);
+
+        // --- Fetch Rooms for Dropdowns ---
+        async function load_room() {
+            try {
+                const res = await fetch('http://127.0.0.1:8000/search_rooms');
+                const rooms = await res.json();
+                
+                const startSelect = document.getElementById('start');
+                const endSelect = document.getElementById('end');
+                
+                let options = '<option value="" disabled selected>Select a location...</option>';
+                rooms.forEach(room => {
+                    options += `<option value="${room.id}">${room.label}</option>`;
+                });
+                
+                startSelect.innerHTML = options;
+                endSelect.innerHTML = options;
+            } catch (e) {
+                console.error("Error loading rooms:", e);
+                document.getElementById('instructions').innerHTML = "<p style='color:red'>Server not connected.</p>";
+            }
+        }
+
+        // --- Fetch and Draw Route ---
+        async function get_route() {
+            // Clear existing markers and lines
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+                    if (!(layer instanceof L.ImageOverlay)) {
+                        map.removeLayer(layer);
+                    }
+                }
+            });
+
+            try {
+                const start = document.getElementById('start').value; 
+                const end = document.getElementById('end').value;
+                const routeContainer = document.getElementById('route');
+
+                if(!start || !end) return alert("Please select both locations!");
+
+                const res = await fetch(`http://127.0.0.1:8000/find_route?startNode=${start}&endNode=${end}`);
+                const result = await res.json();
+                
+                // Convert [x, y] from NetworkX to [y, x] for Leaflet Simple CRS
+                const pathCoordinates = result.route.map(item => [item.coords[1], item.coords[0]]);
+
+                // Draw Path
+                L.polyline(pathCoordinates, {color: 'blue', weight: 5, opacity: 0.8}).addTo(map);
+                
+                // Add Marker at Destination
+                const dest = pathCoordinates[pathCoordinates.length - 1];
+                L.marker(dest).addTo(map).bindPopup(`<b>Destination reached!</b>`).openPopup();
+                
+                // Zoom map to fit the path
+                map.fitBounds(L.polyline(pathCoordinates).getBounds(), {padding: [50, 50]});
+
+                // Update Text List
+                routeContainer.innerHTML = "<strong>Path sequence:</strong>"; 
+                result.route.forEach(node => {
+                    routeContainer.innerHTML += `<p>📍 ${node.name}</p>`;
+                });
+
+            } catch (error) {
+                console.error("Error fetching route:", error);
+                alert("Could not calculate route. Ensure FastAPI is running.");
+            }
+        }
+
+        // Handle window resizing for Leaflet
+        window.addEventListener('resize', () => {
+            map.invalidateSize();
+        });
+
+        // Initialize
+        load_room();
+    </script>
+</body>
+</html>
